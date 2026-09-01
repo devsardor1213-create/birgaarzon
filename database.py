@@ -50,6 +50,60 @@ def init_db():
         )
     ''')
     
+    # Ходимлар жадвали
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            login TEXT UNIQUE,
+            password TEXT,
+            name TEXT,
+            telegram_id INTEGER
+        )
+    ''')
+
+    # Тўпламлар (Маҳсулотлар) жадвали
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS collections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER,
+            name TEXT,
+            price REAL,
+            added_at TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees (id)
+        )
+    ''')
+    
+    # Yangi Yig'imlar (Bundles) jadvallari
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS bundles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER,
+            combo_name TEXT,
+            target_orders INTEGER,
+            added_at TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees (id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS bundle_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bundle_id INTEGER,
+            product_name TEXT,
+            quantity INTEGER,
+            FOREIGN KEY (bundle_id) REFERENCES bundles (id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS bundle_images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bundle_id INTEGER,
+            file_id TEXT,
+            FOREIGN KEY (bundle_id) REFERENCES bundles (id)
+        )
+    ''')
+    
     # Existing tables migration (just in case they exist without new columns)
     try:
         cursor.execute('ALTER TABLE users ADD COLUMN region TEXT')
@@ -226,3 +280,147 @@ def get_pending_surveys():
     rows = cursor.fetchall()
     conn.close()
     return rows
+
+# --- EMPLOYEE FUNCTIONS ---
+
+def add_employee(login, password):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO employees (login, password)
+        VALUES (?, ?)
+    ''', (login, password))
+    emp_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return emp_id
+
+def get_employee_by_credentials(login, password):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM employees WHERE login = ? AND password = ?', (login, password))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+def update_employee_info(emp_id, name, telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('UPDATE employees SET name = ?, telegram_id = ? WHERE id = ?', (name, telegram_id, emp_id))
+    conn.commit()
+    conn.close()
+
+def get_employee_by_tg_id(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM employees WHERE telegram_id = ?', (telegram_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+def get_all_employees():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM employees ORDER BY id DESC')
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def get_employee_by_id(emp_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM employees WHERE id = ?', (emp_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+# --- COLLECTIONS FUNCTIONS ---
+
+def add_collection(employee_id, name, price):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO collections (employee_id, name, price, added_at)
+        VALUES (?, ?, ?, ?)
+    ''', (employee_id, name, price, datetime.now()))
+    conn.commit()
+    conn.close()
+
+def get_employee_collections(employee_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM collections WHERE employee_id = ? ORDER BY added_at DESC', (employee_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def get_employee_stats(employee_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*), SUM(price) FROM collections WHERE employee_id = ?', (employee_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return {"count": row[0] or 0, "total": row[1] or 0}
+
+# --- BUNDLES FUNCTIONS ---
+
+def add_bundle(employee_id, combo_name, target_orders, items, image_file_ids):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO bundles (employee_id, combo_name, target_orders, added_at)
+        VALUES (?, ?, ?, ?)
+    ''', (employee_id, combo_name, target_orders, datetime.now()))
+    
+    bundle_id = cursor.lastrowid
+    
+    for item in items:
+        cursor.execute('''
+            INSERT INTO bundle_items (bundle_id, product_name, quantity)
+            VALUES (?, ?, ?)
+        ''', (bundle_id, item['name'], item['quantity']))
+        
+    for file_id in image_file_ids:
+        cursor.execute('''
+            INSERT INTO bundle_images (bundle_id, file_id)
+            VALUES (?, ?)
+        ''', (bundle_id, file_id))
+        
+    conn.commit()
+    conn.close()
+    return bundle_id
+
+def get_employee_bundles(employee_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM bundles WHERE employee_id = ? ORDER BY added_at DESC', (employee_id,))
+    bundles = cursor.fetchall()
+    
+    result = []
+    for b in bundles:
+        bundle_id = b[0]
+        cursor.execute('SELECT product_name, quantity FROM bundle_items WHERE bundle_id = ?', (bundle_id,))
+        items = cursor.fetchall()
+        
+        cursor.execute('SELECT file_id FROM bundle_images WHERE bundle_id = ?', (bundle_id,))
+        images = [row[0] for row in cursor.fetchall()]
+        
+        result.append({
+            'id': bundle_id,
+            'combo_name': b[2],
+            'target_orders': b[3],
+            'items': items,
+            'images': images,
+            'added_at': b[4]
+        })
+        
+    conn.close()
+    return result
+
+def get_employee_bundle_stats(employee_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM bundles WHERE employee_id = ?', (employee_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return {"count": row[0] or 0}
