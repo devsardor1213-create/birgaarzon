@@ -1,0 +1,237 @@
+{
+    "promo_code": "BIRGA-ARZON",
+    "texts": {
+        "uz": {
+            "welcome": "👋 Assalomu alaykum, <b>{name}</b>! BIRGA ARZON botiga xush kelibsiz! 🛒\n\n🤝 BIRGA ARZON — mahsulotlarni birgalikda buyurtma qilib, arzonroq narxda xarid qilish imkonini beruvchi loyiha.\n\n🎁 Bot orqali siz:\n✅ Qisqa so'rovnomada ishtirok etasiz\n✅ O'z oilangiz ehtiyojlarini belgilaysiz\n✅ Arzon narxdagi takliflardan xabardor bo'lasiz\n✅ Birinchi xarid uchun bonus-kod olishingiz mumkin\n\n📋 Quyidagi menyudan kerakli bo'limni tanlang.\n🚀 BIRGA ARZON — birga olsak, arzon!",
+            "btn_survey": "📝 So'rovnomani to'ldirish",
+            "btn_bonus": "🎁 Bonus kod olish",
+            "btn_work": "💼 Sizlarda ishlamoqchiman",
+            "btn_about": "ℹ️ BIRGA ARZON haqida",
+            "btn_operator": "📞 Operator bilan bog'lanish",
+            "about_text": "ℹ️ <b>BIRGA ARZON</b> — bu ajoyib loyiha!\n\nBiz bilan birga arzon va sifatli mahsulotlarni xarid qiling yoki jamoamizga qo'shilib daromad toping.",
+            "operator_text": "📞 Bizning operator bilan bog'lanish uchun quyidagi manzilga yozing:\n\n{username}",
+            "bonus_has": "🎁 Sizning bonus kodingiz: <b>{code}</b>\n\nUshbu kodni birinchi xarid vaqtida foydalanishingiz mumkin.",
+            "bonus_none": "Sizda hali bonus kod yo'q. Buning uchun avval «📝 So'rovnomani to'ldirish» bo'limi orqali so'rovnomadan o'ting.",
+            "survey_q": "Savol {num}:\n\n{q}",
+            "survey_done": "✅ Rahmat!\nSizning so'rovnomaniz qabul qilindi.\n\n🎁 Sizga BIRGA ARZON loyihasida birinchi xarid uchun bonus kod berildi.\n\nSizning bonus kodingiz: <b>{code}</b>",
+            "work_intro": "👩‍💻 Juda yaxshi!\n\nLoyihada ishlash tartibi bo'yicha ma'lumot olish uchun telefon raqamingizni qoldiring.",
+            "btn_phone": "📱 Telefon raqamini yuborish",
+            "ask_region": "📍 Iltimos, yashash hududingizni (viloyatni) kiriting:",
+            "ask_dir": "Qaysi yo'nalishda ishlashni xohlaysiz?",
+            "dir_1": "👩‍💻 Onlayn ishlash",
+            "dir_2": "📍 O'z hududimda ishlash",
+            "dir_3": "👨‍💼 Kurator bo'lish",
+            "work_done": "✅ Arizangiz qabul qilindi!\n\nTez orada xodimimiz siz bilan bog'lanib, ishlash tartibi haqida to'liq ma'lumot beradi.",
+            "survey_approved": "✅ Tabriklaymiz, sizning so'rovnomangiz tasdiqlandi!",
+            "survey_rejected": "❌ Afsuski, sizning so'rovnomangiz bekor qilindi.",
+            "app_approved": "✅ Tabriklaymiz, sizning ishlash uchun arizangiz tasdiqlandi!",
+            "app_rejected": "❌ Afsuski, sizning ishlash uchun arizangiz bekor qilindi."
+        },
+        "ru": {
+            "welcome": "👋 Здравствуйте, <b>{name}</b>! Добро пожаловать в бот BIRGA ARZON! 🛒\n\n🤝 BIRGA ARZON — это проект, позволяющий совместно заказывать продукты и покупать их по более низким ценам.\n\n🎁 Через бот вы:\n✅ Участвуете в коротком опросе\n✅ Определяете потребности своей семьи\n✅ Узнаете о выгодных предложениях\n✅ Можете получить бонус-код на первую покупку\n\n📋 Выберите нужный раздел из меню ниже.\n🚀 BIRGA ARZON — вместе дешевле!",
+            "btn_survey": "📝 Заполнить анкету",
+            "btn_bonus": "🎁 Получить бонус-код",
+            "btn_work": "💼 Хочу у вас работать",
+            "btn_about": "ℹ️ О BIRGA ARZON",
+            "btn_operator": "📞 Связаться с оператором",
+            "about_text": "ℹ️ <b>BIRGA ARZON</b> — это отличный проект!\n\nПокупайте качественные и недорогие товары вместе с нами или присоединяйтесь к нашей команде и зарабатывайте.",
+            "operator_text": "📞 Для связи с нашим оператором напишите по следующему адресу:\n\n{username}",
+            "bonus_has": "🎁 Ваш бонус-код: <b>{code}</b>\n\nВы можете использовать этот код при первой покупке.",
+            "bonus_none": "У вас еще нет бонус-кода. Для этого сначала пройдите анкету в разделе «📝 Заполнить анкету».",
+            "survey_q": "Вопрос {num}:\n\n{q}",
+            "survey_done": "✅ Спасибо!\nВаша анкета принята.\n\n🎁 Вам выдан бонус-код на первую покупку в проекте BIRGA ARZON.\n\nВаш бонус-код: <b>{code}</b>",
+            "work_intro": "👩‍💻 Отлично!\n\nОставьте свой номер телефона, чтобы получить информацию о порядке работы в проекте.",
+            "btn_phone": "📱 Отправить номер телефона",
+            "ask_region": "📍 Пожалуйста, введите ваш регион (область):",
+            "ask_dir": "В каком направлении вы хотите работать?",
+            "dir_1": "👩‍💻 Работать онлайн",
+            "dir_2": "📍 Работать в своем регионе",
+            "dir_3": "👨‍💼 Быть куратором",
+            "work_done": "✅ Ваша заявка принята!\n\nСкоро наш сотрудник свяжется с вами и предоставит полную информацию о порядке работы.",
+            "survey_approved": "✅ Поздравляем, ваша анкета одобрена!",
+            "survey_rejected": "❌ К сожалению, ваша анкета отклонена.",
+            "app_approved": "✅ Поздравляем, ваша заявка на работу одобрена!",
+            "app_rejected": "❌ К сожалению, ваша заявка на работу отклонена."
+        }
+    },
+    "questions": {
+        "uz": [
+            {
+                "question": "1. Oilada necha kishi doimiy yashaydi?",
+                "options": [
+                    "1-2 kishi",
+                    "3-4 kishi",
+                    "5-6 kishi",
+                    "6 kishidan ko'p"
+                ]
+            },
+            {
+                "question": "2. Oilangizning 1 oylik o'rtacha go'sht iste'moli:",
+                "options": [
+                    "5 kg gacha",
+                    "5-10 kg",
+                    "10-20 kg",
+                    "20 kg dan ortiq"
+                ]
+            },
+            {
+                "question": "3. Kartoshka, piyoz, sabzi bir oylik sarfi:",
+                "options": [
+                    "10 kg gacha",
+                    "10-25 kg",
+                    "25-50 kg (1 qop)",
+                    "50 kg dan ortiq"
+                ]
+            },
+            {
+                "question": "4. Oilangiz bir oyda qancha o'simlik yog'i sarflaydi?",
+                "options": [
+                    "1-2 litr",
+                    "3-5 litr (1 baklashka)",
+                    "5-10 litr",
+                    "10 litrdan ortiq"
+                ]
+            },
+            {
+                "question": "5. Guruch va unni bir safarda qancha olasiz?",
+                "options": [
+                    "Kichik pachkalarda (5 kg gacha)",
+                    "Qopning yarmini (10-25 kg)",
+                    "Butun bir qop (50 kg)",
+                    "1 qopdan ko'p"
+                ]
+            },
+            {
+                "question": "6. Oilangiz bir haftada nechta tuxum yeydi?",
+                "options": [
+                    "10 tadan kam",
+                    "10-30 ta (1 katak)",
+                    "30-60 ta (2 katak)",
+                    "60 tadan ko'p"
+                ]
+            },
+            {
+                "question": "7. Shakar va makaron bir oylik sarfi:",
+                "options": [
+                    "5 kg gacha",
+                    "5-10 kg",
+                    "10-20 kg",
+                    "20 kg dan ortiq"
+                ]
+            },
+            {
+                "question": "8. Qaysi sut mahsulotlarini ko'p sotib olasiz?",
+                "options": [
+                    "Sut / Qatiq",
+                    "Sariyog' / Smetana",
+                    "Pishloq / So'zma"
+                ]
+            },
+            {
+                "question": "9. Kimyoviy vositalarni optom olishga tayyormisiz?",
+                "options": [
+                    "Yo'q, kichik qadoqlarda olamiz",
+                    "Ha, katta hajmda (3-9 kg) olishga tayyormiz"
+                ]
+            },
+            {
+                "question": "10. Platforma orqali birinchi navbatda nima olasiz?",
+                "options": [
+                    "Choy, kofe, shakar",
+                    "Bolalar tagliklari (pampers)",
+                    "Guruch, yog' va makaron",
+                    "Go'sht mahsulotlari"
+                ]
+            }
+        ],
+        "ru": [
+            {
+                "question": "1. Сколько человек постоянно проживает в семье?",
+                "options": [
+                    "1-2 человека",
+                    "3-4 человека",
+                    "5-6 человек",
+                    "Более 6 человек"
+                ]
+            },
+            {
+                "question": "2. Среднее потребление мяса в вашей семье за 1 месяц:",
+                "options": [
+                    "До 5 кг",
+                    "5-10 кг",
+                    "10-20 кг",
+                    "Более 20 кг"
+                ]
+            },
+            {
+                "question": "3. Ежемесячный расход картофеля, лука, моркови:",
+                "options": [
+                    "До 10 кг",
+                    "10-25 кг",
+                    "25-50 кг (1 мешок)",
+                    "Более 50 кг"
+                ]
+            },
+            {
+                "question": "4. Сколько растительного масла ваша семья тратит за месяц?",
+                "options": [
+                    "1-2 литра",
+                    "3-5 литров",
+                    "5-10 литров",
+                    "Более 10 литров"
+                ]
+            },
+            {
+                "question": "5. В каком объеме вы покупаете рис и муку за один раз?",
+                "options": [
+                    "В маленьких пачках (до 5 кг)",
+                    "Пол мешка (10-25 кг)",
+                    "Целый мешок (50 кг)",
+                    "Больше 1 мешка"
+                ]
+            },
+            {
+                "question": "6. Сколько яиц ваша семья съедает за неделю?",
+                "options": [
+                    "Менее 10 шт",
+                    "10-30 шт (1 лоток)",
+                    "30-60 шт (2 лотка)",
+                    "Более 60 шт"
+                ]
+            },
+            {
+                "question": "7. Ежемесячный расход сахара и макарон:",
+                "options": [
+                    "До 5 кг",
+                    "5-10 кг",
+                    "10-20 кг",
+                    "Более 20 кг"
+                ]
+            },
+            {
+                "question": "8. Какие молочные продукты вы чаще всего покупаете?",
+                "options": [
+                    "Молоко / Кефир",
+                    "Сливочное масло / Сметана",
+                    "Сыр / Сузьма"
+                ]
+            },
+            {
+                "question": "9. Готовы ли вы покупать бытовую химию оптом?",
+                "options": [
+                    "Нет, берем в маленьких упаковках",
+                    "Да, готовы брать в больших объемах (3-9 кг)"
+                ]
+            },
+            {
+                "question": "10. Что вы купите в первую очередь через платформу?",
+                "options": [
+                    "Чай, кофе, сахар",
+                    "Детские подгузники (памперсы)",
+                    "Рис, масло и макароны",
+                    "Мясные продукты"
+                ]
+            }
+        ]
+    }
+}
