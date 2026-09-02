@@ -41,7 +41,7 @@ def get_main_menu(lang):
     kb = [
         [KeyboardButton(text=get_t(lang, 'btn_survey')), KeyboardButton(text=get_t(lang, 'btn_bonus'))],
         [KeyboardButton(text=get_t(lang, 'btn_work')), KeyboardButton(text=get_t(lang, 'btn_about'))],
-        [KeyboardButton(text=get_t(lang, 'btn_operator'))]
+        [KeyboardButton(text=get_t(lang, 'btn_operator')), KeyboardButton(text="🧑‍💼 Xodim")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -50,7 +50,7 @@ def get_admin_menu():
         [KeyboardButton(text="👥 Фойдаланувчилар"), KeyboardButton(text="📝 Сўровномалар")],
         [KeyboardButton(text="💼 Ишга аризалар"), KeyboardButton(text="📢 Хабар юбориш")],
         [KeyboardButton(text="🧑‍💼 Ходимлар"), KeyboardButton(text="⚙️ Созламалар")],
-        [KeyboardButton(text="🔙 Бош меню")]
+        [KeyboardButton(text="➕ Маҳсулот қўшиш"), KeyboardButton(text="🔙 Бош меню")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -217,15 +217,28 @@ async def start_survey(message: types.Message, state: FSMContext):
 async def process_survey(message: types.Message, state: FSMContext):
     state_data = await state.get_data()
     lang = state_data.get('lang', 'uz')
-    if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
-        await state.clear()
-        return await message.answer("Бош меню / Главное меню", reply_markup=get_main_menu(lang))
-        
     curr_q_index = state_data['current_q']
     answers = state_data['answers']
     
     data = config.get_data()
     questions = data.get('questions', {}).get(lang, data['questions'].get('uz', []))
+
+    if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+        if curr_q_index > 0:
+            prev_q_index = curr_q_index - 1
+            await state.update_data(current_q=prev_q_index)
+            prev_q_text = questions[prev_q_index]['question']
+            if prev_q_text in answers:
+                del answers[prev_q_text]
+            await state.update_data(answers=answers)
+            q_data = questions[prev_q_index]
+            return await message.answer(
+                get_t(lang, 'survey_q', num=prev_q_index+1, q=q_data['question']),
+                reply_markup=get_survey_keyboard(q_data['options'])
+            )
+        else:
+            await state.clear()
+            return await message.answer("Бош меню / Главное меню", reply_markup=get_main_menu(lang))
     
     q_text = questions[curr_q_index]['question']
     answers[q_text] = message.text
@@ -315,8 +328,14 @@ async def process_region(message: types.Message, state: FSMContext):
     state_data = await state.get_data()
     lang = state_data.get('lang', 'uz')
     if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
-        await state.clear()
-        return await message.answer("Бош меню / Главное меню", reply_markup=get_main_menu(lang))
+        back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
+        kb = [
+            [KeyboardButton(text=get_t(lang, 'btn_phone'), request_contact=True)],
+            [KeyboardButton(text=back_text)]
+        ]
+        markup = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+        await message.answer(get_t(lang, 'work_intro'), reply_markup=markup)
+        return await state.set_state(ApplicationState.waiting_for_phone)
         
     region = message.text
     await state.update_data(region=region)
@@ -337,8 +356,10 @@ async def process_direction(message: types.Message, state: FSMContext):
     lang = state_data.get('lang', 'uz')
     
     if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
-        await state.clear()
-        return await message.answer("Бош меню / Главное меню", reply_markup=get_main_menu(lang))
+        back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
+        kb = [[KeyboardButton(text=back_text)]]
+        await message.answer(get_t(lang, 'ask_region'), reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
+        return await state.set_state(ApplicationState.waiting_for_region)
         
     direction = message.text
     phone = state_data.get("phone")
@@ -422,8 +443,15 @@ async def process_app_decision(callback_query: types.CallbackQuery):
 # --- АДМИН ПАНЕЛ ---
 @dp.message(F.text == "🔙 Бош меню")
 async def admin_back(message: types.Message):
+    if admin_sessions.get(message.from_user.id):
+        del admin_sessions[message.from_user.id]
     lang = database.get_user_lang(message.from_user.id) or 'uz'
     await message.answer("Асосий меню", reply_markup=get_main_menu(lang))
+
+@dp.message(F.text == "🔙 Ортга")
+async def admin_submenu_back(message: types.Message):
+    if admin_sessions.get(message.from_user.id):
+        await message.answer("Админ панелига хуш келибсиз:", reply_markup=get_admin_menu())
 
 @dp.message(F.text == "👥 Фойдаланувчилар")
 async def admin_users(message: types.Message):
@@ -501,15 +529,15 @@ async def admin_apps(message: types.Message):
 async def admin_broadcast_start(message: types.Message, state: FSMContext):
     if not admin_sessions.get(message.from_user.id):
         return
-    await message.answer("📢 Барча фойдаланувчиларга юбориш учун хабар матнини киритинг:\n(Бекор қилиш учун /start босинг)", reply_markup=ReplyKeyboardRemove())
+    kb = [[KeyboardButton(text="🔙 Ортга")]]
+    await message.answer("📢 Барча фойдаланувчиларга юбориш учун хабар матнини киритинг:", reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
     await state.set_state(AdminState.waiting_for_broadcast)
 
 @dp.message(AdminState.waiting_for_broadcast)
 async def admin_broadcast_send(message: types.Message, state: FSMContext):
-    if message.text == '/start':
+    if message.text == '🔙 Ортга' or message.text == '/start':
         await state.clear()
-        lang = database.get_user_lang(message.from_user.id) or 'uz'
-        await message.answer("Бекор қилинди.", reply_markup=get_main_menu(lang))
+        await message.answer("Бекор қилинди.", reply_markup=get_admin_menu())
         return
         
     text_to_send = message.text
@@ -611,7 +639,7 @@ async def admin_employees_menu(message: types.Message):
         return
     kb = [
         [KeyboardButton(text="➕ Ходим қўшиш"), KeyboardButton(text="📋 Ходимлар рўйхати")],
-        [KeyboardButton(text="🔙 Бош меню")]
+        [KeyboardButton(text="🔙 Ортга")]
     ]
     await message.answer("🧑‍💼 Ходимлар бўлими:", reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
 
@@ -652,6 +680,10 @@ async def admin_check_employee(callback_query: types.CallbackQuery):
     await callback_query.message.edit_text(text)
 
 # --- EMPLOYEE BOT SIDE ---
+@dp.message(F.text.in_(["🧑‍💼 Xodim", "🧑‍💼 Сотрудник"]))
+async def btn_xodim_handler(message: types.Message, state: FSMContext):
+    await cmd_xodim(message, state)
+
 @dp.message(Command("xodim"))
 async def cmd_xodim(message: types.Message, state: FSMContext):
     emp = database.get_employee_by_tg_id(message.from_user.id)
@@ -701,43 +733,65 @@ async def show_employee_menu(message: types.Message):
     ]
     await message.answer("Ходимлар менюси:", reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
 
+async def cancel_bundle_process(message: types.Message):
+    if admin_sessions.get(message.from_user.id):
+        await message.answer("Бекор қилинди.", reply_markup=get_admin_menu())
+    else:
+        await show_employee_menu(message)
+
 @dp.message(F.text == "➕ Маҳсулот қўшиш")
 async def emp_add_bundle(message: types.Message, state: FSMContext):
     emp = database.get_employee_by_tg_id(message.from_user.id)
-    if not emp: return
+    is_admin = admin_sessions.get(message.from_user.id)
+    if not emp and not is_admin: return
     await state.update_data(items=[], images=[])
-    kb = [[KeyboardButton(text="Bekor")]]
+    kb = [[KeyboardButton(text="🔙 Ортга")]]
     text = "<b>Yangi yig'im</b>\n\nCombo nomi:\n\n<i>«Har bir to'plamga» — odatda 1. 122 yozsangiz, 1 to'plam uchun ombordan 122 dona ketadi. Omborda shuncha bo'lmasa, mijozga «qolmagan» chiqadi.</i>"
     await message.answer(text, reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
     await state.set_state(BundleState.waiting_for_combo_name)
 
 @dp.message(BundleState.waiting_for_combo_name)
 async def emp_bundle_name(message: types.Message, state: FSMContext):
-    if message.text == "Bekor":
+    if message.text in ["Bekor", "🔙 Ортга"]:
         await state.clear()
-        return await show_employee_menu(message)
+        return await cancel_bundle_process(message)
     await state.update_data(combo_name=message.text)
     data = await state.get_data()
     idx = len(data.get('items', [])) + 1
-    kb = [[KeyboardButton(text="Bekor")]]
+    kb = [[KeyboardButton(text="🔙 Ортга")]]
     await message.answer(f"Mahsulot {idx} (Tanlang yoki yozing):", reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
     await state.set_state(BundleState.waiting_for_product_name)
 
 @dp.message(BundleState.waiting_for_product_name)
 async def emp_bundle_prod_name(message: types.Message, state: FSMContext):
-    if message.text == "Bekor":
-        await state.clear()
-        return await show_employee_menu(message)
+    if message.text in ["Bekor", "🔙 Ортга"]:
+        data = await state.get_data()
+        items = data.get('items', [])
+        if len(items) == 0:
+            kb = [[KeyboardButton(text="🔙 Ортга")]]
+            text = "<b>Yangi yig'im</b>\n\nCombo nomi:"
+            await message.answer(text, reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
+            return await state.set_state(BundleState.waiting_for_combo_name)
+        else:
+            kb = [
+                [InlineKeyboardButton(text="➕ Mahsulot qo'shish", callback_data="add_more_yes")],
+                [InlineKeyboardButton(text="Davom etish ➡️", callback_data="add_more_no")]
+            ]
+            await message.answer("Yana qo'shasizmi?", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+            return await state.set_state(BundleState.waiting_for_more)
     await state.update_data(current_product=message.text)
-    kb = [[KeyboardButton(text="Bekor")]]
+    kb = [[KeyboardButton(text="🔙 Ортга")]]
     await message.answer(f"Har bir to'plamga (miqdori):", reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
     await state.set_state(BundleState.waiting_for_product_quantity)
 
 @dp.message(BundleState.waiting_for_product_quantity)
 async def emp_bundle_prod_qty(message: types.Message, state: FSMContext):
-    if message.text == "Bekor":
-        await state.clear()
-        return await show_employee_menu(message)
+    if message.text in ["Bekor", "🔙 Ортга"]:
+        data = await state.get_data()
+        idx = len(data.get('items', [])) + 1
+        kb = [[KeyboardButton(text="🔙 Ортга")]]
+        await message.answer(f"Mahsulot {idx} (Tanlang yoki yozing):", reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
+        return await state.set_state(BundleState.waiting_for_product_name)
     try:
         qty = int(message.text.strip())
     except:
@@ -762,12 +816,12 @@ async def emp_bundle_more(callback_query: types.CallbackQuery, state: FSMContext
         data = await state.get_data()
         idx = len(data.get('items', [])) + 1
         await callback_query.message.delete()
-        kb = [[KeyboardButton(text="Bekor")]]
+        kb = [[KeyboardButton(text="🔙 Ортга")]]
         await callback_query.message.answer(f"Mahsulot {idx} (Tanlang yoki yozing):", reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
         await state.set_state(BundleState.waiting_for_product_name)
     elif callback_query.data == "add_more_no":
         await callback_query.message.delete()
-        kb = [[KeyboardButton(text="Bekor")]]
+        kb = [[KeyboardButton(text="🔙 Ортга")]]
         text = "<b>Maqsad (buyurtma)</b>\n\n<i>Bu ombor emas. Nechta buyurtma yig'ilishini ko'rsatadi. Yig'imni yopish qo'lda — «Yopish» tugmasi bilan.</i>"
         await callback_query.message.answer(text, reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
         await state.set_state(BundleState.waiting_for_target_orders)
@@ -775,9 +829,13 @@ async def emp_bundle_more(callback_query: types.CallbackQuery, state: FSMContext
 
 @dp.message(BundleState.waiting_for_target_orders)
 async def emp_bundle_target(message: types.Message, state: FSMContext):
-    if message.text == "Bekor":
-        await state.clear()
-        return await show_employee_menu(message)
+    if message.text in ["Bekor", "🔙 Ортга"]:
+        kb = [
+            [InlineKeyboardButton(text="➕ Mahsulot qo'shish", callback_data="add_more_yes")],
+            [InlineKeyboardButton(text="Davom etish ➡️", callback_data="add_more_no")]
+        ]
+        await message.answer("Yana qo'shasizmi?", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        return await state.set_state(BundleState.waiting_for_more)
     try:
         target = int(message.text.strip())
     except:
@@ -785,7 +843,7 @@ async def emp_bundle_target(message: types.Message, state: FSMContext):
         return
     await state.update_data(target_orders=target)
     
-    kb = [[KeyboardButton(text="Bekor"), KeyboardButton(text="Ochish")]]
+    kb = [[KeyboardButton(text="🔙 Ортга"), KeyboardButton(text="Ochish")]]
     text = "<b>Rasmlar</b>\nKamida 1 ta, ko'pi bilan 5 ta. Birinchisi — cover.\n\nRasmlarni yuboring, tugatgach «Ochish» tugmasini bosing:"
     await message.answer(text, reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
     await state.set_state(BundleState.waiting_for_images)
@@ -802,11 +860,13 @@ async def emp_bundle_photo(message: types.Message, state: FSMContext):
     else:
         await message.answer("Siz allaqachon maksimal (5 ta) rasm yubordingiz. «Ochish» tugmasini bosing.")
 
-@dp.message(BundleState.waiting_for_images, F.text.in_(["Ochish", "Bekor"]))
+@dp.message(BundleState.waiting_for_images, F.text.in_(["Ochish", "Bekor", "🔙 Ортга"]))
 async def emp_bundle_save(message: types.Message, state: FSMContext):
-    if message.text == "Bekor":
-        await state.clear()
-        return await show_employee_menu(message)
+    if message.text in ["Bekor", "🔙 Ортга"]:
+        kb = [[KeyboardButton(text="🔙 Ортга")]]
+        text = "<b>Maqsad (buyurtma)</b>\n\nNechta buyurtma yig'ilishini ko'rsatadi:"
+        await message.answer(text, reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
+        return await state.set_state(BundleState.waiting_for_target_orders)
         
     data = await state.get_data()
     images = data.get('images', [])
@@ -815,8 +875,10 @@ async def emp_bundle_save(message: types.Message, state: FSMContext):
         return
         
     emp = database.get_employee_by_tg_id(message.from_user.id)
+    emp_id = emp[0] if emp else None
+    
     database.add_bundle(
-        employee_id=emp[0],
+        employee_id=emp_id,
         combo_name=data['combo_name'],
         target_orders=data['target_orders'],
         items=data['items'],
@@ -825,7 +887,11 @@ async def emp_bundle_save(message: types.Message, state: FSMContext):
     
     await message.answer("✅ Yangi yig'im muvaffaqiyatli ochildi!", reply_markup=ReplyKeyboardRemove())
     await state.clear()
-    await show_employee_menu(message)
+    
+    if admin_sessions.get(message.from_user.id):
+        await message.answer("Асосий админ менюси:", reply_markup=get_admin_menu())
+    else:
+        await show_employee_menu(message)
 
 @dp.message(F.text == "📦 Менинг тўпламларим")
 async def emp_collections(message: types.Message):
