@@ -1,9 +1,8 @@
 import json
 
 BOT_TOKEN = "8995262442:AAHqGlZAq0A1Wm_IEe5eIPHjYL7C5IMcLTQ"
-ADMIN_LOGIN = "admin" # Админ панелга кириш учун логин
-OPERATOR_USERNAME = "@operator_birgaarzon"
-ADMIN_PASSWORD = "123" # Админ панелга кириш учун пароль
+ADMIN_ID = 8733326327
+OPERATOR_USERNAME = "@workmydiler"
 
 DATA_FILE = "data.json"
 

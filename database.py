@@ -129,21 +129,57 @@ def init_db():
         cursor.execute("ALTER TABLE applications ADD COLUMN status TEXT DEFAULT 'pending'")
     except sqlite3.OperationalError:
         pass
+
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN is_employee BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN referrer_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+        
+    # Yangi maxsulotlar jadvali
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER,
+            name TEXT,
+            photo_id TEXT,
+            price TEXT,
+            added_at TIMESTAMP
+        )
+    ''')
     
     conn.commit()
     conn.close()
 
-def save_user(telegram_id, username, first_name, last_name):
+def save_user(telegram_id, username, first_name, last_name, referrer_id=None):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('SELECT telegram_id FROM users WHERE telegram_id = ?', (telegram_id,))
-    if not cursor.fetchone():
+    cursor.execute('SELECT referrer_id FROM users WHERE telegram_id = ?', (telegram_id,))
+    row = cursor.fetchone()
+    is_new = False
+    is_new_referral = False
+    
+    if not row:
         cursor.execute('''
-            INSERT INTO users (telegram_id, username, first_name, last_name, joined_at)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (telegram_id, username, first_name, last_name, datetime.now()))
+            INSERT INTO users (telegram_id, username, first_name, last_name, joined_at, referrer_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (telegram_id, username, first_name, last_name, datetime.now(), referrer_id))
+        is_new = True
+        if referrer_id:
+            is_new_referral = True
+    else:
+        existing_referrer = row[0]
+        if existing_referrer is None and referrer_id is not None:
+            cursor.execute('UPDATE users SET referrer_id = ? WHERE telegram_id = ?', (referrer_id, telegram_id))
+            is_new_referral = True
+
     conn.commit()
     conn.close()
+    return is_new, is_new_referral
 
 def get_user_lang(telegram_id):
     conn = sqlite3.connect(DB_PATH)
@@ -155,7 +191,7 @@ def get_user_lang(telegram_id):
         return row[0]
     return None
 
-def update_user_info(telegram_id, phone=None, region=None, lang=None):
+def update_user_info(telegram_id, phone=None, region=None, lang=None, is_employee=None):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     if phone:
@@ -164,6 +200,8 @@ def update_user_info(telegram_id, phone=None, region=None, lang=None):
         cursor.execute('UPDATE users SET region = ? WHERE telegram_id = ?', (region, telegram_id))
     if lang:
         cursor.execute('UPDATE users SET lang = ? WHERE telegram_id = ?', (lang, telegram_id))
+    if is_employee is not None:
+        cursor.execute('UPDATE users SET is_employee = ? WHERE telegram_id = ?', (is_employee, telegram_id))
     conn.commit()
     conn.close()
 
@@ -252,6 +290,22 @@ def get_all_users():
     rows = cursor.fetchall()
     conn.close()
     return rows
+
+def get_user_info(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+def get_user_is_employee(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT is_employee FROM users WHERE telegram_id = ?', (telegram_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return bool(row[0]) if row and row[0] else False
 
 def get_pending_applications():
     conn = sqlite3.connect(DB_PATH)
@@ -424,3 +478,31 @@ def get_employee_bundle_stats(employee_id):
     row = cursor.fetchone()
     conn.close()
     return {"count": row[0] or 0}
+
+# --- NEW FUNCTIONS FOR REFERRALS AND PRODUCTS ---
+
+def get_referrals(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT first_name, username, joined_at FROM users WHERE referrer_id = ? ORDER BY joined_at DESC', (telegram_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def add_product(telegram_id, name, photo_id, price):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO products (telegram_id, name, photo_id, price, added_at)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (telegram_id, name, photo_id, price, datetime.now()))
+    conn.commit()
+    conn.close()
+
+def get_user_products(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT name, price, added_at, photo_id FROM products WHERE telegram_id = ? ORDER BY added_at DESC', (telegram_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
