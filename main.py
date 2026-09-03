@@ -80,8 +80,9 @@ class SurveyState(StatesGroup):
     answering = State()
 
 class ApplicationState(StatesGroup):
-    waiting_for_phone = State()
-    waiting_for_region = State()
+    waiting_for_name = State()
+    waiting_for_age = State()
+    waiting_for_address = State()
     waiting_for_direction = State()
 
 class AdminState(StatesGroup):
@@ -288,20 +289,17 @@ async def start_application(message: types.Message, state: FSMContext):
     lang = database.get_user_lang(message.from_user.id) or 'uz'
     back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
     kb = [
-        [KeyboardButton(text=get_t(lang, 'btn_phone'), request_contact=True)],
         [KeyboardButton(text=back_text)]
     ]
     markup = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
     
-    await message.answer(
-        get_t(lang, 'work_intro'),
-        reply_markup=markup
-    )
+    text = "📝 Ism va familiyangizni kiriting:" if lang == 'uz' else "📝 Введите ваше имя и фамилию:"
+    await message.answer(text, reply_markup=markup)
     await state.update_data(lang=lang)
-    await state.set_state(ApplicationState.waiting_for_phone)
+    await state.set_state(ApplicationState.waiting_for_name)
 
-@dp.message(ApplicationState.waiting_for_phone, F.contact | F.text)
-async def process_phone(message: types.Message, state: FSMContext):
+@dp.message(ApplicationState.waiting_for_name)
+async def process_name(message: types.Message, state: FSMContext):
     state_data = await state.get_data()
     lang = state_data.get('lang', 'uz')
     
@@ -309,33 +307,37 @@ async def process_phone(message: types.Message, state: FSMContext):
         await state.clear()
         return await message.answer("Бош меню / Главное меню", reply_markup=get_main_menu(lang, message.from_user.id))
         
-    if message.contact:
-        phone = message.contact.phone_number
-    else:
-        phone = message.text
-        
-    await state.update_data(phone=phone)
-    back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
-    kb = [[KeyboardButton(text=back_text)]]
-    await message.answer(get_t(lang, 'ask_region'), reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
-    await state.set_state(ApplicationState.waiting_for_region)
+    await state.update_data(name=message.text)
+    text = "Yoshingizni kiriting:" if lang == 'uz' else "Введите ваш возраст:"
+    await message.answer(text)
+    await state.set_state(ApplicationState.waiting_for_age)
 
-@dp.message(ApplicationState.waiting_for_region)
-async def process_region(message: types.Message, state: FSMContext):
+@dp.message(ApplicationState.waiting_for_age)
+async def process_age(message: types.Message, state: FSMContext):
     state_data = await state.get_data()
     lang = state_data.get('lang', 'uz')
+    
     if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
-        back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
-        kb = [
-            [KeyboardButton(text=get_t(lang, 'btn_phone'), request_contact=True)],
-            [KeyboardButton(text=back_text)]
-        ]
-        markup = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
-        await message.answer(get_t(lang, 'work_intro'), reply_markup=markup)
-        return await state.set_state(ApplicationState.waiting_for_phone)
+        text = "📝 Ism va familiyangizni kiriting:" if lang == 'uz' else "📝 Введите ваше имя и фамилию:"
+        await message.answer(text)
+        return await state.set_state(ApplicationState.waiting_for_name)
         
-    region = message.text
-    await state.update_data(region=region)
+    await state.update_data(age=message.text)
+    text = "Yashash manzilingizni kiriting:" if lang == 'uz' else "Введите ваш адрес проживания:"
+    await message.answer(text)
+    await state.set_state(ApplicationState.waiting_for_address)
+
+@dp.message(ApplicationState.waiting_for_address)
+async def process_address(message: types.Message, state: FSMContext):
+    state_data = await state.get_data()
+    lang = state_data.get('lang', 'uz')
+    
+    if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+        text = "Yoshingizni kiriting:" if lang == 'uz' else "Введите ваш возраст:"
+        await message.answer(text)
+        return await state.set_state(ApplicationState.waiting_for_age)
+        
+    await state.update_data(address=message.text)
     
     back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
     kb = [
@@ -353,17 +355,19 @@ async def process_direction(message: types.Message, state: FSMContext):
     lang = state_data.get('lang', 'uz')
     
     if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+        text = "Yashash manzilingizni kiriting:" if lang == 'uz' else "Введите ваш адрес проживания:"
         back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
         kb = [[KeyboardButton(text=back_text)]]
-        await message.answer(get_t(lang, 'ask_region'), reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
-        return await state.set_state(ApplicationState.waiting_for_region)
+        markup = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+        await message.answer(text, reply_markup=markup)
+        return await state.set_state(ApplicationState.waiting_for_address)
         
     direction = message.text
-    phone = state_data.get("phone")
-    region = state_data.get("region", "Номаълум")
-    lang = state_data['lang']
+    name = state_data.get("name")
+    age = state_data.get("age")
+    address = state_data.get("address")
     
-    app_id = database.save_application(message.from_user.id, phone, region, direction)
+    app_id = database.save_application(message.from_user.id, name, age, address, direction)
     
     await message.answer(
         get_t(lang, 'work_done'),
@@ -376,11 +380,11 @@ async def process_direction(message: types.Message, state: FSMContext):
     username = f"@{message.from_user.username}" if message.from_user.username else "Йўқ"
     admin_text = (
         f"🆕 <b>ЯНГИ ИШГА АРИЗА</b>\n"
-        f"👤 Исм: {message.from_user.first_name}\n"
-        f"🔗 Username: {username}\n"
-        f"📱 Телефон: {phone}\n"
-        f"📍 Ҳудуд: {region}\n"
+        f"👤 Исм/Фамилия: {name}\n"
+        f"🎂 Ёши: {age}\n"
+        f"📍 Манзил: {address}\n"
         f"👩‍💻 Йўналиш: {direction}\n"
+        f"🔗 Username: {username}\n"
         f"🆔 Telegram ID: {message.from_user.id}\n"
         f"📅 Сана: {today}"
     )
@@ -548,17 +552,17 @@ async def admin_apps(message: types.Message):
     
     for a in apps:
         a_id = a[0]
-        first_name = a[1]
-        phone = a[2]
-        region = a[3]
+        name = a[1]
+        age = a[2]
+        address = a[3]
         direction = a[4]
         date = a[6]
         
         text = (
             f"💼 <b>ИШГА АРИЗА</b> (ID: {a_id})\n"
-            f"👤 Исм: {first_name}\n"
-            f"📱 Телефон: {phone}\n"
-            f"📍 Ҳудуд: {region}\n"
+            f"👤 Исм/Фамилия: {name}\n"
+            f"🎂 Ёши: {age}\n"
+            f"📍 Манзил: {address}\n"
             f"👩‍💻 Йўналиш: {direction}\n"
             f"📅 Сана: {date}"
         )

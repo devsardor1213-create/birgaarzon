@@ -131,6 +131,21 @@ def init_db():
         pass
 
     try:
+        cursor.execute('ALTER TABLE applications ADD COLUMN name TEXT')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute('ALTER TABLE applications ADD COLUMN age TEXT')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute('ALTER TABLE applications ADD COLUMN address TEXT')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
         cursor.execute('ALTER TABLE users ADD COLUMN is_employee BOOLEAN DEFAULT 0')
     except sqlite3.OperationalError:
         pass
@@ -243,16 +258,16 @@ def has_completed_survey(telegram_id):
     conn.close()
     return bool(row)
 
-def save_application(telegram_id, phone, region, direction):
+def save_application(telegram_id, name, age, address, direction):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    update_user_info(telegram_id, phone=phone, region=region)
+    update_user_info(telegram_id, region=address)
     
     cursor.execute('''
-        INSERT INTO applications (telegram_id, phone_number, region, direction, applied_at)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (telegram_id, phone, region, direction, datetime.now()))
+        INSERT INTO applications (telegram_id, name, age, address, direction, applied_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (telegram_id, name, age, address, direction, datetime.now()))
     
     app_id = cursor.lastrowid
     
@@ -311,7 +326,7 @@ def get_pending_applications():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT a.id, u.first_name, a.phone_number, a.region, a.direction, a.status, a.applied_at, u.telegram_id 
+        SELECT a.id, a.name, a.age, a.address, a.direction, a.status, a.applied_at, u.telegram_id 
         FROM applications a 
         JOIN users u ON a.telegram_id = u.telegram_id 
         WHERE a.status = 'pending'
