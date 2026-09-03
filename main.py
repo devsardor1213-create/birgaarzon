@@ -49,8 +49,9 @@ def get_main_menu(lang, telegram_id=None):
 def get_admin_menu():
     kb = [
         [KeyboardButton(text="👥 Фойдаланувчилар"), KeyboardButton(text="📝 Сўровномалар")],
-        [KeyboardButton(text="💼 Ишга аризалар"), KeyboardButton(text="📢 Хабар юбориш")],
-        [KeyboardButton(text="⚙️ Созламалар"), KeyboardButton(text="🔙 Бош меню")]
+        [KeyboardButton(text="💼 Ишга аризалар"), KeyboardButton(text="👥 TG Xodimlar")],
+        [KeyboardButton(text="📢 Хабар юбориш"), KeyboardButton(text="⚙️ Созламалар")],
+        [KeyboardButton(text="🔙 Бош меню")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -77,6 +78,7 @@ class LangState(StatesGroup):
 
 class SurveyState(StatesGroup):
     answering = State()
+    waiting_for_work_decision = State()
 
 class ApplicationState(StatesGroup):
     waiting_for_name = State()
@@ -98,11 +100,23 @@ class ProductState(StatesGroup):
     waiting_for_photo = State()
     waiting_for_price = State()
 
+class EditProductState(StatesGroup):
+    waiting_for_field = State()
+    waiting_for_name = State()
+    waiting_for_photo = State()
+    waiting_for_price = State()
+
+class EditEmployeeState(StatesGroup):
+    waiting_for_field = State()
+    waiting_for_name = State()
+    waiting_for_login = State()
+    waiting_for_password = State()
+
 # --- БУЙРУҚЛАР ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext, command: CommandObject = None):
     user = message.from_user
-    if user.id == config.ADMIN_ID:
+    if user.id in config.ADMIN_IDS:
         admin_sessions[user.id] = True
         await message.answer("Асосий админ менюси:", reply_markup=get_admin_menu())
         return
@@ -120,6 +134,7 @@ async def cmd_start(message: types.Message, state: FSMContext, command: CommandO
     
     if is_new_referral and referrer_id:
         try:
+            database.update_user_info(user.id, is_employee=1)
             count = len(database.get_referrals(referrer_id))
             await bot.send_message(referrer_id, f"🎉 Sizda yangi a'zo qo'shildi: {user.first_name}!\nJami a'zolaringiz: {count} ta.")
         except:
@@ -161,7 +176,7 @@ async def process_lang(message: types.Message, state: FSMContext):
 
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
-    if message.from_user.id == config.ADMIN_ID:
+    if message.from_user.id in config.ADMIN_IDS:
         admin_sessions[message.from_user.id] = True
         await message.answer("Админ панелига хуш келибсиз:", reply_markup=get_admin_menu())
     else:
@@ -188,6 +203,11 @@ async def operator_contact(message: types.Message):
 # --- СЎРОВНОМА ЖАРАЁНИ ---
 @dp.message(lambda msg: check_text(msg.text, 'btn_survey'))
 async def start_survey(message: types.Message, state: FSMContext):
+    if database.get_user_is_employee(message.from_user.id):
+        lang = database.get_user_lang(message.from_user.id) or 'uz'
+        text = "Siz allaqachon xodimsiz!" if lang == 'uz' else "Вы уже являетесь сотрудником!"
+        return await message.answer(text, reply_markup=get_employee_menu())
+
     lang = database.get_user_lang(message.from_user.id) or 'uz'
     data = config.get_data()
     questions = data.get('questions', {}).get(lang, data['questions'].get('uz', []))
@@ -245,15 +265,42 @@ async def process_survey(message: types.Message, state: FSMContext):
         )
     else:
         answers_str = "\n".join([f"- {k}: {v}" for k, v in answers.items()])
+        await state.update_data(answers_str=answers_str)
+        kb = [[KeyboardButton(text="Ha"), KeyboardButton(text="Yo'q")]]
+        if lang == 'ru':
+            kb = [[KeyboardButton(text="Да"), KeyboardButton(text="Нет")]]
+        
+        await message.answer(
+            "Ishlaysizmi?" if lang == 'uz' else "Будете работать?",
+            reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+        )
+        await state.set_state(SurveyState.waiting_for_work_decision)
+
+@dp.message(SurveyState.waiting_for_work_decision)
+async def process_work_decision(message: types.Message, state: FSMContext):
+    state_data = await state.get_data()
+    lang = state_data.get('lang', 'uz')
+    
+    if message.text in ["Yo'q", "Нет", "🔙 Ortga", "🔙 Назад", "/start"]:
+        await state.clear()
+        
+        ikb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🌐 Saytga o'tish", url="https://mydiller.uz/")]
+        ])
+        await message.answer("Tushunarli. / Понятно.", reply_markup=ikb)
+        return await message.answer("Asosiy menyu:", reply_markup=get_main_menu(lang, message.from_user.id))
+        
+    if message.text in ["Ha", "Да"]:
+        answers_str = state_data.get('answers_str', '')
         survey_id = database.save_survey(message.from_user.id, answers_str)
+        
+        data = config.get_data()
         promo_code = data.get('promo_code', 'BIRGA-ARZON')
         
         await message.answer(
-            get_t(lang, 'survey_done', code=promo_code),
-            reply_markup=get_main_menu(lang, message.from_user.id)
+            get_t(lang, 'survey_done', code=promo_code)
         )
         
-        # Admin xabar
         phone = "Берилмаган"
         region = "Берилмаган"
         
@@ -276,11 +323,21 @@ async def process_survey(message: types.Message, state: FSMContext):
             except:
                 pass
         
-        await state.clear()
+        # Transition to application
+        text = "📝 Ism va familiyangizni kiriting:" if lang == 'uz' else "📝 Введите ваше имя и фамилию:"
+        kb_back = [[KeyboardButton(text="🔙 Ortga" if lang == 'uz' else "🔙 Назад")]]
+        await message.answer(text, reply_markup=ReplyKeyboardMarkup(keyboard=kb_back, resize_keyboard=True))
+        await state.update_data(lang=lang)
+        await state.set_state(ApplicationState.waiting_for_name)
 
 # --- ИШГА АРИЗА ЖАРАЁНИ ---
 @dp.message(lambda msg: check_text(msg.text, 'btn_work'))
 async def start_application(message: types.Message, state: FSMContext):
+    if database.get_user_is_employee(message.from_user.id):
+        lang = database.get_user_lang(message.from_user.id) or 'uz'
+        text = "Siz allaqachon xodimsiz!" if lang == 'uz' else "Вы уже являетесь сотрудником!"
+        return await message.answer(text, reply_markup=get_employee_menu())
+
     lang = database.get_user_lang(message.from_user.id) or 'uz'
     back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
     kb = [
@@ -319,7 +376,7 @@ async def process_age(message: types.Message, state: FSMContext):
             return await state.set_state(ApplicationState.waiting_for_name)
             
         await state.update_data(age=message.text)
-        text = "Yashash manzilingizni kiriting:" if lang == 'uz' else "Введите ваш адрес проживания:"
+        text = "Shahar / tumaningizni kiriting:" if lang == 'uz' else "Введите ваш город / район:"
         await message.answer(text)
         await state.set_state(ApplicationState.waiting_for_address)
     except Exception as e:
@@ -358,7 +415,7 @@ async def process_direction(message: types.Message, state: FSMContext):
     lang = state_data.get('lang', 'uz')
     
     if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
-        text = "Yashash manzilingizni kiriting:" if lang == 'uz' else "Введите ваш адрес проживания:"
+        text = "Shahar / tumaningizni kiriting:" if lang == 'uz' else "Введите ваш город / район:"
         back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
         kb = [[KeyboardButton(text=back_text)]]
         markup = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
@@ -422,7 +479,7 @@ async def process_survey_decision(callback_query: types.CallbackQuery):
         try:
             if status == "approved":
                 database.update_user_info(user_id, is_employee=1)
-                await bot.send_message(user_id, "🎉 Tabriklaymiz, siz tasdiqlandingiz!\nEndi <b>🧑‍💻 Xodimlar bo'limi</b>dan foydalanishingiz mumkin.", reply_markup=get_main_menu(user_lang, user_id))
+                await bot.send_message(user_id, "🎉 Tabriklaymiz, siz sinov muddati asosida ishga qabul qilindingiz!\nEndi <b>🧑‍💻 Xodimlar bo'limi</b>dan foydalanishingiz mumkin.", reply_markup=get_employee_menu())
             else:
                 await bot.send_message(user_id, get_t(user_lang, msg_key))
         except:
@@ -448,7 +505,7 @@ async def process_app_decision(callback_query: types.CallbackQuery):
         try:
             if status == "approved":
                 database.update_user_info(user_id, is_employee=1)
-                await bot.send_message(user_id, "🎉 Tabriklaymiz, siz tasdiqlandingiz!\nEndi <b>🧑‍💻 Xodimlar bo'limi</b>dan foydalanishingiz mumkin.", reply_markup=get_main_menu(user_lang, user_id))
+                await bot.send_message(user_id, "🎉 Tabriklaymiz, siz sinov muddati asosida ishga qabul qilindingiz!\nEndi <b>🧑‍💻 Xodimlar bo'limi</b>dan foydalanishingiz mumkin.", reply_markup=get_employee_menu())
             else:
                 await bot.send_message(user_id, get_t(user_lang, msg_key))
         except:
@@ -680,6 +737,77 @@ async def save_new_promo(message: types.Message, state: FSMContext):
     await message.answer(f"✅ Промокод муваффақиятли ўзгартирилди!\nЯнги код: <b>{new_promo}</b>", reply_markup=get_admin_menu())
     await state.clear()
 
+@dp.message(F.text == "👥 TG Xodimlar")
+async def admin_tg_employees(message: types.Message):
+    if not admin_sessions.get(message.from_user.id):
+        return
+    emps = database.get_employee_users()
+    if not emps:
+        return await message.answer("Tizimda telegram orqali ulangan xodimlar yo'q.")
+    
+    kb = []
+    for emp in emps[:50]:
+        name = emp[2] or "Ismsiz"
+        kb.append([InlineKeyboardButton(text=f"👤 {name}", callback_data=f"tgemp_{emp[0]}")])
+    await message.answer("👥 Telegram xodimlar ro'yxati:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+@dp.callback_query(lambda c: c.data.startswith('tgemp_'))
+async def process_tgemp_info(callback_query: types.CallbackQuery):
+    user_id = int(callback_query.data.split('_')[1])
+    u = database.get_user_info(user_id)
+    if not u:
+        return await callback_query.answer("Foydalanuvchi topilmadi!")
+    
+    prods = database.get_user_products(user_id)
+    text = f"👤 <b>Xodim:</b> {u[2]} {u[3] or ''}\n"
+    text += f"🔗 Username: @{u[1] or 'Yoq'}\n"
+    text += f"📱 Tel: {u[4] or 'Yoq'}\n"
+    text += f"📍 Hudud: {u[5] or 'Yoq'}\n"
+    text += f"📦 Jami mahsulotlari: {len(prods)} ta\n"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📦 Mahsulotlarini ko'rish", callback_data=f"tgprod_{user_id}")],
+        [InlineKeyboardButton(text="❌ Xodimlikdan o'chirish", callback_data=f"tgdel_{user_id}")]
+    ])
+    await callback_query.message.answer(text, reply_markup=kb)
+    await callback_query.answer()
+
+@dp.callback_query(lambda c: c.data.startswith('tgdel_'))
+async def process_tgdel_emp(callback_query: types.CallbackQuery):
+    user_id = int(callback_query.data.split('_')[1])
+    database.update_user_info(user_id, is_employee=0)
+    await callback_query.message.edit_text("✅ Foydalanuvchi xodimlikdan chiqarildi.")
+    await callback_query.answer()
+
+@dp.callback_query(lambda c: c.data.startswith('tgprod_'))
+async def process_tgprod_view(callback_query: types.CallbackQuery):
+    user_id = int(callback_query.data.split('_')[1])
+    prods = database.get_user_products(user_id)
+    if not prods:
+        return await callback_query.answer("Bu xodim hech qanday mahsulot qo'shmagan.", show_alert=True)
+    
+    await callback_query.message.answer("📦 <b>Xodimning mahsulotlari:</b>")
+    for p in prods:
+        prod_id = p[0]
+        name = p[1]
+        price = p[2]
+        photo_id = p[3]
+        caption = f"▪️ <b>{name}</b>\n💰 Narxi: {price} so'm"
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"del_prod_{prod_id}")]
+        ])
+        
+        try:
+            if photo_id:
+                await bot.send_photo(callback_query.message.chat.id, photo=photo_id, caption=caption, reply_markup=kb)
+            else:
+                await bot.send_message(callback_query.message.chat.id, caption, reply_markup=kb)
+        except Exception:
+            await bot.send_message(callback_query.message.chat.id, caption, reply_markup=kb)
+            
+    await callback_query.answer()
+
 # --- ADMIN: EMPLOYEES ---
 @dp.message(F.text == "🧑‍💼 Ходимлар")
 async def admin_employees_menu(message: types.Message):
@@ -715,6 +843,85 @@ async def admin_employee_list(message: types.Message):
         btn_text = f"👤 {name or 'Исмсиз'} ({login})"
         kb.append([InlineKeyboardButton(text=btn_text, callback_data=f"chk_emp_{emp_id}")])
     await message.answer("📋 Ходимлар рўйхати. Текшириш учун устига босинг:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+@dp.callback_query(lambda c: c.data.startswith('chk_emp_'))
+async def process_chk_emp(callback_query: types.CallbackQuery, state: FSMContext):
+    emp_id = int(callback_query.data.split('_')[2])
+    emp = database.get_employee_by_id(emp_id)
+    if not emp:
+        return await callback_query.answer("Xodim topilmadi!")
+    
+    text = f"👤 Xodim ma'lumotlari:\nLogini: {emp[1]}\nParoli: {emp[2]}\nIsmi: {emp[3]}\nTG ID: {emp[4] or 'Mavjud emas'}"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Tahrirlash", callback_data=f"edit_emp_{emp_id}")],
+        [InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"del_emp_{emp_id}")]
+    ])
+    await callback_query.message.answer(text, reply_markup=kb)
+    await callback_query.answer()
+
+@dp.callback_query(lambda c: c.data.startswith('del_emp_'))
+async def process_del_emp(callback_query: types.CallbackQuery):
+    emp_id = int(callback_query.data.split('_')[2])
+    database.delete_employee(emp_id)
+    await callback_query.message.edit_text("✅ Xodim o'chirildi.")
+    await callback_query.answer()
+
+@dp.callback_query(lambda c: c.data.startswith('edit_emp_'))
+async def process_edit_emp(callback_query: types.CallbackQuery, state: FSMContext):
+    emp_id = int(callback_query.data.split('_')[2])
+    await state.update_data(edit_emp_id=emp_id)
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Ismni o'zgartirish", callback_data="edemp_name")],
+        [InlineKeyboardButton(text="Loginni o'zgartirish", callback_data="edemp_login")],
+        [InlineKeyboardButton(text="Parolni o'zgartirish", callback_data="edemp_password")],
+        [InlineKeyboardButton(text="Bekor qilish", callback_data="edemp_cancel")]
+    ])
+    await callback_query.message.answer("Nimani tahrirlamoqchisiz?", reply_markup=kb)
+    await state.set_state(EditEmployeeState.waiting_for_field)
+    await callback_query.answer()
+
+@dp.callback_query(EditEmployeeState.waiting_for_field)
+async def process_edemp_field(callback_query: types.CallbackQuery, state: FSMContext):
+    field = callback_query.data
+    if field == "edemp_cancel":
+        await state.clear()
+        return await callback_query.message.edit_text("Tahrirlash bekor qilindi.")
+        
+    if field == "edemp_name":
+        await callback_query.message.edit_text("Yangi ismni kiriting:")
+        await state.set_state(EditEmployeeState.waiting_for_name)
+    elif field == "edemp_login":
+        await callback_query.message.edit_text("Yangi loginni kiriting:")
+        await state.set_state(EditEmployeeState.waiting_for_login)
+    elif field == "edemp_password":
+        await callback_query.message.edit_text("Yangi parolni kiriting:")
+        await state.set_state(EditEmployeeState.waiting_for_password)
+    await callback_query.answer()
+
+@dp.message(EditEmployeeState.waiting_for_name)
+async def process_edemp_name(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    emp_id = data.get('edit_emp_id')
+    database.update_employee(emp_id, name=message.text)
+    await state.clear()
+    await message.answer("✅ Xodim ismi o'zgartirildi!")
+
+@dp.message(EditEmployeeState.waiting_for_login)
+async def process_edemp_login(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    emp_id = data.get('edit_emp_id')
+    database.update_employee(emp_id, login=message.text)
+    await state.clear()
+    await message.answer("✅ Xodim logini o'zgartirildi!")
+
+@dp.message(EditEmployeeState.waiting_for_password)
+async def process_edemp_password(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    emp_id = data.get('edit_emp_id')
+    database.update_employee(emp_id, password=message.text)
+    await state.clear()
+    await message.answer("✅ Xodim paroli o'zgartirildi!")
 
 
 def get_employee_menu():
@@ -760,10 +967,26 @@ async def emp_my_products(message: types.Message):
     prods = database.get_user_products(message.from_user.id)
     if not prods:
         return await message.answer("Siz hali maxsulot qo'shmagansiz.")
-    text = f"📦 <b>Siz qo'shgan maxsulotlar ({len(prods)} ta):</b>\n\n"
+    await message.answer(f"📦 <b>Siz qo'shgan maxsulotlar ({len(prods)} ta):</b>")
     for p in prods:
-        text += f"▪️ <b>{p[0]}</b> - {p[1]} so'm\n"
-    await message.answer(text)
+        prod_id = p[0]
+        name = p[1]
+        price = p[2]
+        photo_id = p[3]
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Tahrirlash", callback_data=f"edit_prod_{prod_id}")],
+            [InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"del_prod_{prod_id}")]
+        ])
+        
+        caption = f"▪️ <b>{name}</b>\n💰 Narxi: {price} so'm"
+        try:
+            if photo_id:
+                await bot.send_photo(message.chat.id, photo=photo_id, caption=caption, reply_markup=kb)
+            else:
+                await message.answer(caption, reply_markup=kb)
+        except Exception:
+            await message.answer(caption, reply_markup=kb)
 
 @dp.message(F.text == "➕ Maxsulot qo'shish")
 async def emp_add_product(message: types.Message, state: FSMContext):
@@ -810,6 +1033,73 @@ async def process_prod_price(message: types.Message, state: FSMContext):
     database.add_product(message.from_user.id, data['name'], data['photo_id'], message.text)
     await state.clear()
     await message.answer("✅ Maxsulot muvaffaqiyatli qo'shildi!", reply_markup=get_employee_menu())
+
+@dp.callback_query(lambda c: c.data.startswith('edit_prod_'))
+async def process_edit_prod(callback_query: types.CallbackQuery, state: FSMContext):
+    prod_id = int(callback_query.data.split('_')[2])
+    await state.update_data(edit_prod_id=prod_id)
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Nomini o'zgartirish", callback_data="edit_field_name")],
+        [InlineKeyboardButton(text="Rasmni o'zgartirish", callback_data="edit_field_photo")],
+        [InlineKeyboardButton(text="Narxni o'zgartirish", callback_data="edit_field_price")],
+        [InlineKeyboardButton(text="Bekor qilish", callback_data="edit_field_cancel")]
+    ])
+    await callback_query.message.answer("Nimani tahrirlamoqchisiz?", reply_markup=kb)
+    await state.set_state(EditProductState.waiting_for_field)
+    await callback_query.answer()
+
+@dp.callback_query(lambda c: c.data.startswith('del_prod_'))
+async def process_del_prod(callback_query: types.CallbackQuery):
+    prod_id = int(callback_query.data.split('_')[2])
+    database.delete_product(prod_id)
+    await callback_query.message.edit_text("✅ Maxsulot o'chirildi.")
+    await callback_query.answer()
+
+@dp.callback_query(EditProductState.waiting_for_field)
+async def process_edit_field(callback_query: types.CallbackQuery, state: FSMContext):
+    field = callback_query.data
+    if field == "edit_field_cancel":
+        await state.clear()
+        await callback_query.message.edit_text("Tahrirlash bekor qilindi.")
+        return
+        
+    if field == "edit_field_name":
+        await callback_query.message.edit_text("Yangi nomni kiriting:")
+        await state.set_state(EditProductState.waiting_for_name)
+    elif field == "edit_field_photo":
+        await callback_query.message.edit_text("Yangi rasmni yuboring:")
+        await state.set_state(EditProductState.waiting_for_photo)
+    elif field == "edit_field_price":
+        await callback_query.message.edit_text("Yangi narxni kiriting:")
+        await state.set_state(EditProductState.waiting_for_price)
+    
+    await callback_query.answer()
+
+@dp.message(EditProductState.waiting_for_name)
+async def process_edit_name(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    prod_id = data.get('edit_prod_id')
+    database.update_product(prod_id, name=message.text)
+    await state.clear()
+    await message.answer("✅ Maxsulot nomi o'zgartirildi!")
+
+@dp.message(EditProductState.waiting_for_photo, F.photo)
+async def process_edit_photo(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    prod_id = data.get('edit_prod_id')
+    photo_id = message.photo[-1].file_id
+    database.update_product(prod_id, photo_id=photo_id)
+    await state.clear()
+    await message.answer("✅ Maxsulot rasmi o'zgartirildi!")
+
+@dp.message(EditProductState.waiting_for_price)
+async def process_edit_price(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    prod_id = data.get('edit_prod_id')
+    database.update_product(prod_id, price=message.text)
+    await state.clear()
+    await message.answer("✅ Maxsulot narxi o'zgartirildi!")
 
 async def main():
     print("Бот ишга тушди...")

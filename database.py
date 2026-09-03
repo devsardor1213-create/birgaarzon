@@ -379,6 +379,25 @@ def update_employee_info(emp_id, name, telegram_id):
     conn.commit()
     conn.close()
 
+def update_employee(emp_id, login=None, password=None, name=None):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    if login:
+        cursor.execute('UPDATE employees SET login = ? WHERE id = ?', (login, emp_id))
+    if password:
+        cursor.execute('UPDATE employees SET password = ? WHERE id = ?', (password, emp_id))
+    if name is not None:
+        cursor.execute('UPDATE employees SET name = ? WHERE id = ?', (name, emp_id))
+    conn.commit()
+    conn.close()
+
+def delete_employee(emp_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM employees WHERE id = ?', (emp_id,))
+    conn.commit()
+    conn.close()
+
 def get_employee_by_tg_id(telegram_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -386,6 +405,14 @@ def get_employee_by_tg_id(telegram_id):
     row = cursor.fetchone()
     conn.close()
     return row
+
+def get_employee_users():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE is_employee = 1 ORDER BY joined_at DESC')
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 
 def get_all_employees():
     conn = sqlite3.connect(DB_PATH)
@@ -517,7 +544,34 @@ def add_product(telegram_id, name, photo_id, price):
 def get_user_products(telegram_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('SELECT name, price, added_at, photo_id FROM products WHERE telegram_id = ? ORDER BY added_at DESC', (telegram_id,))
+    cursor.execute('SELECT id, name, price, photo_id, added_at FROM products WHERE telegram_id = ? ORDER BY added_at DESC', (telegram_id,))
     rows = cursor.fetchall()
     conn.close()
     return rows
+
+def get_product_by_id(product_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, telegram_id, name, photo_id, price, added_at FROM products WHERE id = ?', (product_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+def update_product(product_id, name=None, photo_id=None, price=None):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    if name:
+        cursor.execute('UPDATE products SET name = ? WHERE id = ?', (name, product_id))
+    if photo_id:
+        cursor.execute('UPDATE products SET photo_id = ? WHERE id = ?', (photo_id, product_id))
+    if price:
+        cursor.execute('UPDATE products SET price = ? WHERE id = ?', (price, product_id))
+    conn.commit()
+    conn.close()
+
+def delete_product(product_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM products WHERE id = ?', (product_id,))
+    conn.commit()
+    conn.close()
