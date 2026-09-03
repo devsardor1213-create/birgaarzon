@@ -39,9 +39,8 @@ def get_lang_menu():
 
 def get_main_menu(lang, telegram_id=None):
     kb = [
-        [KeyboardButton(text=get_t(lang, 'btn_survey')), KeyboardButton(text=get_t(lang, 'btn_bonus'))],
-        [KeyboardButton(text=get_t(lang, 'btn_work')), KeyboardButton(text=get_t(lang, 'btn_about'))],
-        [KeyboardButton(text=get_t(lang, 'btn_operator'))]
+        [KeyboardButton(text=get_t(lang, 'btn_survey')), KeyboardButton(text=get_t(lang, 'btn_work'))],
+        [KeyboardButton(text=get_t(lang, 'btn_about')), KeyboardButton(text=get_t(lang, 'btn_operator'))]
     ]
     if telegram_id and database.get_user_is_employee(telegram_id):
         kb.append([KeyboardButton(text="🧑‍💻 Xodimlar bo'limi")])
@@ -136,7 +135,10 @@ async def cmd_start(message: types.Message, state: FSMContext, command: CommandO
     else:
         await state.clear()
         welcome_text = get_t(lang, 'welcome', name=user.first_name)
-        await message.answer(welcome_text, reply_markup=get_main_menu(lang, user.id))
+        data = config.get_data()
+        code = data.get('promo_code', 'BIRGA-ARZON')
+        bonus_text = get_t(lang, 'bonus_has', code=code)
+        await message.answer(f"{welcome_text}\n\n{bonus_text}", reply_markup=get_main_menu(lang, user.id))
 
 @dp.message(LangState.waiting_for_lang)
 async def process_lang(message: types.Message, state: FSMContext):
@@ -152,7 +154,10 @@ async def process_lang(message: types.Message, state: FSMContext):
     await state.clear()
     
     welcome_text = get_t(lang, 'welcome', name=message.from_user.first_name)
-    await message.answer(welcome_text, reply_markup=get_main_menu(lang, message.from_user.id))
+    data = config.get_data()
+    code = data.get('promo_code', 'BIRGA-ARZON')
+    bonus_text = get_t(lang, 'bonus_has', code=code)
+    await message.answer(f"{welcome_text}\n\n{bonus_text}", reply_markup=get_main_menu(lang, message.from_user.id))
 
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
@@ -178,17 +183,7 @@ async def operator_contact(message: types.Message):
     text = get_t(lang, 'operator_text', username=config.OPERATOR_USERNAME)
     await message.answer(text, reply_markup=get_main_menu(lang, message.from_user.id))
 
-@dp.message(lambda msg: check_text(msg.text, 'btn_bonus'))
-async def get_bonus(message: types.Message):
-    lang = database.get_user_lang(message.from_user.id) or 'uz'
-    has_survey = database.has_completed_survey(message.from_user.id)
-    if has_survey:
-        data = config.get_data()
-        code = data.get('promo_code', 'BIRGA-ARZON')
-        text = get_t(lang, 'bonus_has', code=code)
-    else:
-        text = get_t(lang, 'bonus_none')
-    await message.answer(text, reply_markup=get_main_menu(lang, message.from_user.id))
+
 
 # --- СЎРОВНОМА ЖАРАЁНИ ---
 @dp.message(lambda msg: check_text(msg.text, 'btn_survey'))
@@ -314,40 +309,48 @@ async def process_name(message: types.Message, state: FSMContext):
 
 @dp.message(ApplicationState.waiting_for_age)
 async def process_age(message: types.Message, state: FSMContext):
-    state_data = await state.get_data()
-    lang = state_data.get('lang', 'uz')
-    
-    if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
-        text = "📝 Ism va familiyangizni kiriting:" if lang == 'uz' else "📝 Введите ваше имя и фамилию:"
-        await message.answer(text)
-        return await state.set_state(ApplicationState.waiting_for_name)
+    try:
+        state_data = await state.get_data()
+        lang = state_data.get('lang', 'uz')
         
-    await state.update_data(age=message.text)
-    text = "Yashash manzilingizni kiriting:" if lang == 'uz' else "Введите ваш адрес проживания:"
-    await message.answer(text)
-    await state.set_state(ApplicationState.waiting_for_address)
+        if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+            text = "📝 Ism va familiyangizni kiriting:" if lang == 'uz' else "📝 Введите ваше имя и фамилию:"
+            await message.answer(text)
+            return await state.set_state(ApplicationState.waiting_for_name)
+            
+        await state.update_data(age=message.text)
+        text = "Yashash manzilingizni kiriting:" if lang == 'uz' else "Введите ваш адрес проживания:"
+        await message.answer(text)
+        await state.set_state(ApplicationState.waiting_for_address)
+    except Exception as e:
+        import traceback
+        await message.answer(f"Xato (age): {e}\n{traceback.format_exc()}")
 
 @dp.message(ApplicationState.waiting_for_address)
 async def process_address(message: types.Message, state: FSMContext):
-    state_data = await state.get_data()
-    lang = state_data.get('lang', 'uz')
-    
-    if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
-        text = "Yoshingizni kiriting:" if lang == 'uz' else "Введите ваш возраст:"
-        await message.answer(text)
-        return await state.set_state(ApplicationState.waiting_for_age)
+    try:
+        state_data = await state.get_data()
+        lang = state_data.get('lang', 'uz')
         
-    await state.update_data(address=message.text)
-    
-    back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
-    kb = [
-        [KeyboardButton(text=get_t(lang, 'dir_1')), KeyboardButton(text=get_t(lang, 'dir_2'))],
-        [KeyboardButton(text=get_t(lang, 'dir_3')), KeyboardButton(text=back_text)]
-    ]
-    markup = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
-    
-    await message.answer(get_t(lang, 'ask_dir'), reply_markup=markup)
-    await state.set_state(ApplicationState.waiting_for_direction)
+        if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+            text = "Yoshingizni kiriting:" if lang == 'uz' else "Введите ваш возраст:"
+            await message.answer(text)
+            return await state.set_state(ApplicationState.waiting_for_age)
+            
+        await state.update_data(address=message.text)
+        
+        back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
+        kb = [
+            [KeyboardButton(text=get_t(lang, 'dir_1')), KeyboardButton(text=get_t(lang, 'dir_2'))],
+            [KeyboardButton(text=back_text)]
+        ]
+        markup = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+        
+        await message.answer(get_t(lang, 'ask_dir'), reply_markup=markup)
+        await state.set_state(ApplicationState.waiting_for_direction)
+    except Exception as e:
+        import traceback
+        await message.answer(f"Xato (address): {e}\n{traceback.format_exc()}")
 
 @dp.message(ApplicationState.waiting_for_direction)
 async def process_direction(message: types.Message, state: FSMContext):
