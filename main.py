@@ -16,6 +16,16 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
+from aiogram.exceptions import TelegramNetworkError
+import logging
+
+@dp.errors()
+async def errors_handler(event: types.ErrorEvent):
+    if isinstance(event.exception, TelegramNetworkError):
+        return True
+    return True
+
+
 database.init_db()
 
 admin_sessions = {}
@@ -40,7 +50,8 @@ def get_lang_menu():
 def get_main_menu(lang, telegram_id=None):
     kb = [
         [KeyboardButton(text=get_t(lang, 'btn_survey')), KeyboardButton(text=get_t(lang, 'btn_work'))],
-        [KeyboardButton(text=get_t(lang, 'btn_about')), KeyboardButton(text=get_t(lang, 'btn_operator'))]
+        [KeyboardButton(text=get_t(lang, 'btn_products')), KeyboardButton(text=get_t(lang, 'btn_about'))],
+        [KeyboardButton(text=get_t(lang, 'btn_operator'))]
     ]
     if telegram_id and database.get_user_is_employee(telegram_id):
         kb.append([KeyboardButton(text="🧑‍💻 Xodimlar bo'limi")])
@@ -50,8 +61,7 @@ def get_admin_menu():
     kb = [
         [KeyboardButton(text="👥 Фойдаланувчилар"), KeyboardButton(text="📝 Сўровномалар")],
         [KeyboardButton(text="💼 Ишга аризалар"), KeyboardButton(text="👥 TG Xodimlar")],
-        [KeyboardButton(text="📢 Хабар юбориш"), KeyboardButton(text="⚙️ Созламалар")],
-        [KeyboardButton(text="🔙 Бош меню")]
+        [KeyboardButton(text="📢 Хабар юбориш"), KeyboardButton(text="⚙️ Созламалар")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -71,6 +81,13 @@ def get_decision_keyboard(record_type, record_id):
         ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
+
+def get_employee_menu():
+    kb = [
+        [KeyboardButton(text="➕ Maxsulot qo'shish"), KeyboardButton(text="🔗 Referal tizimi")],
+        [KeyboardButton(text="📦 Mening maxsulotlarim")]
+    ]
+    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 # --- ҲОЛАТЛАР (FSM) ---
 class LangState(StatesGroup):
@@ -190,7 +207,10 @@ def check_text(msg_text, key):
 @dp.message(lambda msg: check_text(msg.text, 'btn_about'))
 async def about_info(message: types.Message):
     lang = database.get_user_lang(message.from_user.id) or 'uz'
-    await message.answer(get_t(lang, 'about_text'), reply_markup=get_main_menu(lang, message.from_user.id))
+    ikb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌐 Saytga o'tish" if lang == 'uz' else "🌐 Перейти на сайт", url="http://demo-user.mydiller.uz")]
+    ])
+    await message.answer(get_t(lang, 'about_text'), reply_markup=ikb)
 
 @dp.message(lambda msg: check_text(msg.text, 'btn_operator'))
 async def operator_contact(message: types.Message):
@@ -198,15 +218,42 @@ async def operator_contact(message: types.Message):
     text = get_t(lang, 'operator_text', username=config.OPERATOR_USERNAME)
     await message.answer(text, reply_markup=get_main_menu(lang, message.from_user.id))
 
+@dp.message(lambda msg: check_text(msg.text, 'btn_products'))
+async def view_all_products(message: types.Message):
+    lang = database.get_user_lang(message.from_user.id) or 'uz'
+    prods = database.get_all_products()
+    if not prods:
+        text = "🤷‍♂️ Hozircha maxsulotlar yo'q." if lang == 'uz' else "🤷‍♂️ Пока нет товаров."
+        return await message.answer(text, reply_markup=get_main_menu(lang, message.from_user.id))
+        
+    text = f"📦 <b>Barcha maxsulotlar ({len(prods)} ta):</b>" if lang == 'uz' else f"📦 <b>Все товары ({len(prods)}):</b>"
+    await message.answer(text, reply_markup=get_main_menu(lang, message.from_user.id))
+    
+    for p in prods:
+        prod_id = p[0]
+        name = p[1]
+        price = p[2]
+        photo_id = p[3]
+        
+        caption = f"▪️ <b>{name}</b>\n💰 Narxi / Цена: {price} so'm"
+        
+        ikb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🌐 Saytga o'tish" if lang == 'uz' else "🌐 Перейти на сайт", url="http://demo-user.mydiller.uz")]
+        ])
+        
+        try:
+            if photo_id:
+                await bot.send_photo(message.chat.id, photo=photo_id, caption=caption, reply_markup=ikb)
+            else:
+                await message.answer(caption, reply_markup=ikb)
+        except Exception:
+            await message.answer(caption, reply_markup=ikb)
+
 
 
 # --- СЎРОВНОМА ЖАРАЁНИ ---
 @dp.message(lambda msg: check_text(msg.text, 'btn_survey'))
 async def start_survey(message: types.Message, state: FSMContext):
-    if database.get_user_is_employee(message.from_user.id):
-        lang = database.get_user_lang(message.from_user.id) or 'uz'
-        text = "Siz allaqachon xodimsiz!" if lang == 'uz' else "Вы уже являетесь сотрудником!"
-        return await message.answer(text, reply_markup=get_employee_menu())
 
     lang = database.get_user_lang(message.from_user.id) or 'uz'
     data = config.get_data()
@@ -234,7 +281,7 @@ async def process_survey(message: types.Message, state: FSMContext):
     data = config.get_data()
     questions = data.get('questions', {}).get(lang, data['questions'].get('uz', []))
 
-    if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+    if message.text in ["🔙 Ortga", "🔙 Назад", "/start", "🔙 Asosiy menyu", "🔙 Главное меню"]:
         if curr_q_index > 0:
             prev_q_index = curr_q_index - 1
             await state.update_data(current_q=prev_q_index)
@@ -265,41 +312,11 @@ async def process_survey(message: types.Message, state: FSMContext):
         )
     else:
         answers_str = "\n".join([f"- {k}: {v}" for k, v in answers.items()])
-        await state.update_data(answers_str=answers_str)
-        kb = [[KeyboardButton(text="Ha"), KeyboardButton(text="Yo'q")]]
-        if lang == 'ru':
-            kb = [[KeyboardButton(text="Да"), KeyboardButton(text="Нет")]]
         
-        await message.answer(
-            "Ishlaysizmi?" if lang == 'uz' else "Будете работать?",
-            reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
-        )
-        await state.set_state(SurveyState.waiting_for_work_decision)
-
-@dp.message(SurveyState.waiting_for_work_decision)
-async def process_work_decision(message: types.Message, state: FSMContext):
-    state_data = await state.get_data()
-    lang = state_data.get('lang', 'uz')
-    
-    if message.text in ["Yo'q", "Нет", "🔙 Ortga", "🔙 Назад", "/start"]:
-        await state.clear()
-        
-        ikb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🌐 Saytga o'tish", url="https://mydiller.uz/")]
-        ])
-        await message.answer("Tushunarli. / Понятно.", reply_markup=ikb)
-        return await message.answer("Asosiy menyu:", reply_markup=get_main_menu(lang, message.from_user.id))
-        
-    if message.text in ["Ha", "Да"]:
-        answers_str = state_data.get('answers_str', '')
         survey_id = database.save_survey(message.from_user.id, answers_str)
         
         data = config.get_data()
         promo_code = data.get('promo_code', 'BIRGA-ARZON')
-        
-        await message.answer(
-            get_t(lang, 'survey_done', code=promo_code)
-        )
         
         phone = "Берилмаган"
         region = "Берилмаган"
@@ -317,25 +334,36 @@ async def process_work_decision(message: types.Message, state: FSMContext):
         )
         
         kb = get_decision_keyboard("surv", survey_id)
-        for admin_id in admin_sessions.keys():
+        
+        ikb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Guruhga qo'shilish" if lang == 'uz' else "Вступить в группу", url="https://t.me/birgaarzonn")]
+        ])
+        
+        await message.answer(
+            "✅ So'rovnomangiz adminga yuborildi. Kuting..." if lang == 'uz' else "✅ Ваша анкета отправлена админу. Ожидайте...",
+            reply_markup=ikb
+        )
+        
+        await message.answer(
+            "Menyu:" if lang == 'uz' else "Меню:",
+            reply_markup=get_main_menu(lang, message.from_user.id)
+        )
+        
+        await state.clear()
+        
+        for admin_id in config.ADMIN_IDS:
             try:
                 await bot.send_message(admin_id, admin_text, reply_markup=kb)
             except:
                 pass
-        
-        # Transition to application
-        text = "📝 Ism va familiyangizni kiriting:" if lang == 'uz' else "📝 Введите ваше имя и фамилию:"
-        kb_back = [[KeyboardButton(text="🔙 Ortga" if lang == 'uz' else "🔙 Назад")]]
-        await message.answer(text, reply_markup=ReplyKeyboardMarkup(keyboard=kb_back, resize_keyboard=True))
-        await state.update_data(lang=lang)
-        await state.set_state(ApplicationState.waiting_for_name)
+
 
 # --- ИШГА АРИЗА ЖАРАЁНИ ---
 @dp.message(lambda msg: check_text(msg.text, 'btn_work'))
 async def start_application(message: types.Message, state: FSMContext):
     if database.get_user_is_employee(message.from_user.id):
         lang = database.get_user_lang(message.from_user.id) or 'uz'
-        text = "Siz allaqachon xodimsiz!" if lang == 'uz' else "Вы уже являетесь сотрудником!"
+        text = "Siz sinov muddatidagi xodimsiz!" if lang == 'uz' else "Вы являетесь сотрудником на испытательном сроке!"
         return await message.answer(text, reply_markup=get_employee_menu())
 
     lang = database.get_user_lang(message.from_user.id) or 'uz'
@@ -355,7 +383,7 @@ async def process_name(message: types.Message, state: FSMContext):
     state_data = await state.get_data()
     lang = state_data.get('lang', 'uz')
     
-    if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+    if message.text in ["🔙 Ortga", "🔙 Назад", "/start", "🔙 Asosiy menyu", "🔙 Главное меню"]:
         await state.clear()
         return await message.answer("Бош меню / Главное меню", reply_markup=get_main_menu(lang, message.from_user.id))
         
@@ -370,7 +398,7 @@ async def process_age(message: types.Message, state: FSMContext):
         state_data = await state.get_data()
         lang = state_data.get('lang', 'uz')
         
-        if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+        if message.text in ["🔙 Ortga", "🔙 Назад", "/start", "🔙 Asosiy menyu", "🔙 Главное меню"]:
             text = "📝 Ism va familiyangizni kiriting:" if lang == 'uz' else "📝 Введите ваше имя и фамилию:"
             await message.answer(text)
             return await state.set_state(ApplicationState.waiting_for_name)
@@ -389,7 +417,7 @@ async def process_address(message: types.Message, state: FSMContext):
         state_data = await state.get_data()
         lang = state_data.get('lang', 'uz')
         
-        if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+        if message.text in ["🔙 Ortga", "🔙 Назад", "/start", "🔙 Asosiy menyu", "🔙 Главное меню"]:
             text = "Yoshingizni kiriting:" if lang == 'uz' else "Введите ваш возраст:"
             await message.answer(text)
             return await state.set_state(ApplicationState.waiting_for_age)
@@ -414,7 +442,7 @@ async def process_direction(message: types.Message, state: FSMContext):
     state_data = await state.get_data()
     lang = state_data.get('lang', 'uz')
     
-    if message.text in ["🔙 Ortga", "🔙 Назад", "/start"]:
+    if message.text in ["🔙 Ortga", "🔙 Назад", "/start", "🔙 Asosiy menyu", "🔙 Главное меню"]:
         text = "Shahar / tumaningizni kiriting:" if lang == 'uz' else "Введите ваш город / район:"
         back_text = "🔙 Ortga" if lang == 'uz' else "🔙 Назад"
         kb = [[KeyboardButton(text=back_text)]]
@@ -429,8 +457,15 @@ async def process_direction(message: types.Message, state: FSMContext):
     
     app_id = database.save_application(message.from_user.id, name, age, address, direction)
     
+    ikb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Guruhga qo'shilish" if lang == 'uz' else "Вступить в группу", url="https://t.me/birgaarzonn")]
+    ])
     await message.answer(
         get_t(lang, 'work_done'),
+        reply_markup=ikb
+    )
+    await message.answer(
+        "Menyu:" if lang == 'uz' else "Меню:",
         reply_markup=get_main_menu(lang, message.from_user.id)
     )
     
@@ -450,7 +485,7 @@ async def process_direction(message: types.Message, state: FSMContext):
     )
     
     kb = get_decision_keyboard("app", app_id)
-    for admin_id in admin_sessions.keys():
+    for admin_id in config.ADMIN_IDS:
         try:
             await bot.send_message(admin_id, admin_text, reply_markup=kb)
         except:
@@ -479,7 +514,11 @@ async def process_survey_decision(callback_query: types.CallbackQuery):
         try:
             if status == "approved":
                 database.update_user_info(user_id, is_employee=1)
+                ikb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="Guruhga qo'shilish" if user_lang == 'uz' else "Вступить в группу", url="https://t.me/birgaarzonn")]
+                ])
                 await bot.send_message(user_id, "🎉 Tabriklaymiz, siz sinov muddati asosida ishga qabul qilindingiz!\nEndi <b>🧑‍💻 Xodimlar bo'limi</b>dan foydalanishingiz mumkin.", reply_markup=get_employee_menu())
+                await bot.send_message(user_id, "Guruhimizga qo'shiling:", reply_markup=ikb)
             else:
                 await bot.send_message(user_id, get_t(user_lang, msg_key))
         except:
@@ -505,7 +544,11 @@ async def process_app_decision(callback_query: types.CallbackQuery):
         try:
             if status == "approved":
                 database.update_user_info(user_id, is_employee=1)
+                ikb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="Guruhga qo'shilish" if user_lang == 'uz' else "Вступить в группу", url="https://t.me/birgaarzonn")]
+                ])
                 await bot.send_message(user_id, "🎉 Tabriklaymiz, siz sinov muddati asosida ishga qabul qilindingiz!\nEndi <b>🧑‍💻 Xodimlar bo'limi</b>dan foydalanishingiz mumkin.", reply_markup=get_employee_menu())
+                await bot.send_message(user_id, "Guruhimizga qo'shiling:", reply_markup=ikb)
             else:
                 await bot.send_message(user_id, get_t(user_lang, msg_key))
         except:
@@ -927,7 +970,7 @@ async def process_edemp_password(message: types.Message, state: FSMContext):
 def get_employee_menu():
     kb = [
         [KeyboardButton(text="➕ Maxsulot qo'shish"), KeyboardButton(text="🔗 Referal tizimi")],
-        [KeyboardButton(text="📦 Mening maxsulotlarim"), KeyboardButton(text="🔙 Asosiy menyu")]
+        [KeyboardButton(text="📦 Mening maxsulotlarim")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -952,22 +995,28 @@ async def emp_referrals(message: types.Message):
     refs = database.get_referrals(message.from_user.id)
     text = f"🔗 <b>Sizning referal havolangiz:</b>\n{ref_link}\n\n"
     text += f"👥 <b>Taklif qilingan a'zolar ({len(refs)} ta):</b>\n"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
     for r in refs:
         name = r[0]
         uname = f"(@{r[1]}) " if r[1] else ""
+        tg_id = r[3]
         text += f"- {name} {uname}\n"
+        kb.inline_keyboard.append([InlineKeyboardButton(text=f"📦 {name} maxsulotlari", callback_data=f"ref_prods_{tg_id}")])
+        
     if not refs:
-        text += "Hali hech kim taklif qilinmagan."
-    await message.answer(text, disable_web_page_preview=True)
+        text += "🤷‍♂️ Hali hech kim taklif qilinmagan."
+    await message.answer(text, disable_web_page_preview=True, reply_markup=kb if refs else get_employee_menu())
 
-@dp.message(F.text == "📦 Mening maxsulotlarim")
-async def emp_my_products(message: types.Message):
-    if not database.get_user_is_employee(message.from_user.id):
-        return
-    prods = database.get_user_products(message.from_user.id)
+@dp.callback_query(lambda c: c.data.startswith('ref_prods_'))
+async def process_ref_prods(callback_query: types.CallbackQuery):
+    tg_id = int(callback_query.data.split('_')[2])
+    prods = database.get_user_products(tg_id)
     if not prods:
-        return await message.answer("Siz hali maxsulot qo'shmagansiz.")
-    await message.answer(f"📦 <b>Siz qo'shgan maxsulotlar ({len(prods)} ta):</b>")
+        await callback_query.answer("Bu a'zo hali maxsulot qo'shmagan.", show_alert=True)
+        return
+        
+    await callback_query.message.answer(f"📦 <b>Tanlangan referalning maxsulotlari ({len(prods)} ta):</b>")
     for p in prods:
         prod_id = p[0]
         name = p[1]
@@ -975,8 +1024,36 @@ async def emp_my_products(message: types.Message):
         photo_id = p[3]
         
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✏️ Tahrirlash", callback_data=f"edit_prod_{prod_id}")],
             [InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"del_prod_{prod_id}")]
+        ])
+        
+        caption = f"▪️ <b>{name}</b>\n💰 Narxi: {price} so'm"
+        try:
+            if photo_id:
+                await bot.send_photo(callback_query.message.chat.id, photo=photo_id, caption=caption, reply_markup=kb)
+            else:
+                await callback_query.message.answer(caption, reply_markup=kb)
+        except Exception:
+            await callback_query.message.answer(caption, reply_markup=kb)
+    await callback_query.answer()
+
+@dp.message(F.text == "📦 Mening maxsulotlarim")
+async def emp_my_products(message: types.Message):
+    if not database.get_user_is_employee(message.from_user.id):
+        return
+    prods = database.get_user_products(message.from_user.id)
+    if not prods:
+        return await message.answer("🤷‍♂️ <b>Siz hali maxsulot qo'shmagansiz.</b>\n\nPastdagi <i>➕ Maxsulot qo'shish</i> tugmasi orqali yangi maxsulot qo'shishingiz mumkin.", reply_markup=get_employee_menu())
+    await message.answer(f"📦 <b>Siz qo'shgan maxsulotlar ({len(prods)} ta):</b>", reply_markup=get_employee_menu())
+    for p in prods:
+        prod_id = p[0]
+        name = p[1]
+        price = p[2]
+        photo_id = p[3]
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🌐 Saytga o'tish", url="http://demo-user.mydiller.uz")],
+            [InlineKeyboardButton(text="✏️ Tahrirlash", callback_data=f"edit_prod_{prod_id}"), InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"del_prod_{prod_id}")]
         ])
         
         caption = f"▪️ <b>{name}</b>\n💰 Narxi: {price} so'm"

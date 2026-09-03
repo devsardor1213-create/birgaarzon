@@ -526,7 +526,7 @@ def get_employee_bundle_stats(employee_id):
 def get_referrals(telegram_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('SELECT first_name, username, joined_at FROM users WHERE referrer_id = ? ORDER BY joined_at DESC', (telegram_id,))
+    cursor.execute('SELECT first_name, username, joined_at, telegram_id FROM users WHERE referrer_id = ? ORDER BY joined_at DESC', (telegram_id,))
     rows = cursor.fetchall()
     conn.close()
     return rows
@@ -545,6 +545,14 @@ def get_user_products(telegram_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT id, name, price, photo_id, added_at FROM products WHERE telegram_id = ? ORDER BY added_at DESC', (telegram_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def get_all_products():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, name, price, photo_id, added_at, telegram_id FROM products ORDER BY added_at DESC LIMIT 50')
     rows = cursor.fetchall()
     conn.close()
     return rows

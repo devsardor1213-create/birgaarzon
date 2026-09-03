@@ -3,9 +3,10 @@
     "texts": {
         "uz": {
             "welcome": "👋 Assalomu alaykum, <b>{name}</b>! BIRGA ARZON botiga xush kelibsiz! 🛒\n\n🤝 BIRGA ARZON — mahsulotlarni birgalikda buyurtma qilib, arzonroq narxda xarid qilish imkonini beruvchi loyiha.\n\n🎁 Bot orqali siz:\n✅ Qisqa so'rovnomada ishtirok etasiz\n✅ O'z oilangiz ehtiyojlarini belgilaysiz\n✅ Arzon narxdagi takliflardan xabardor bo'lasiz\n✅ Birinchi xarid uchun bonus-kod olishingiz mumkin\n\n📋 Quyidagi menyudan kerakli bo'limni tanlang.\n🚀 BIRGA ARZON — birga olsak, arzon!",
-            "btn_survey": "📝 So'rovnoma",
+            "btn_survey": "📝 So'rovnomani to'ldirish",
             "btn_bonus": "🎁 Bonus kod",
             "btn_work": "💼 Ishga kirish",
+            "btn_products": "🛍 Maxsulotlar",
             "btn_about": "ℹ️ Biz haqimizda",
             "btn_operator": "📞 Operator",
             "about_text": "🌿 BIRGA ARZON’га хуш келибсиз!\n\nБирлашамиз 🤝\n\n🛒 Бирга харид — манфаатли нарх\n💰 Фаол иштирок — қўшимча даромад\n💼 Жамоа билан — янги иш уринлар.\n🤝 BIRGA ARZON — имкониятлар бирлашадиган жой.\n\n📱 Барчаси битта қулай Telegram ботда",
@@ -29,9 +30,10 @@
         },
         "ru": {
             "welcome": "👋 Здравствуйте, <b>{name}</b>! Добро пожаловать в бот BIRGA ARZON! 🛒\n\n🤝 BIRGA ARZON — это проект, позволяющий совместно заказывать продукты и покупать их по более низким ценам.\n\n🎁 Через бот вы:\n✅ Участвуете в коротком опросе\n✅ Определяете потребности своей семьи\n✅ Узнаете о выгодных предложениях\n✅ Можете получить бонус-код на первую покупку\n\n📋 Выберите нужный раздел из меню ниже.\n🚀 BIRGA ARZON — вместе дешевле!",
-            "btn_survey": "📝 Анкета",
+            "btn_survey": "📝 Заполнить анкету",
             "btn_bonus": "🎁 Бонус-код",
             "btn_work": "💼 Работа",
+            "btn_products": "🛍 Товары",
             "btn_about": "ℹ️ О нас",
             "btn_operator": "📞 Оператор",
             "about_text": "🌿 BIRGA ARZON’га хуш келибсиз!\n\nБирлашамиз 🤝\n\n🛒 Бирга харид — манфаатли нарх\n💰 Фаол иштирок — қўшимча даромад\n💼 Жамоа билан — янги иш уринлар.\n🤝 BIRGA ARZON — имкониятлар бирлашадиган жой.\n\n📱 Барчаси битта қулай Telegram ботда",
