@@ -496,6 +496,7 @@ async def process_direction(message: types.Message, state: FSMContext):
 # --- ADMIN TUGMALARI (CALLBACKS) ---
 @dp.callback_query(lambda c: c.data.startswith('surv_'))
 async def process_survey_decision(callback_query: types.CallbackQuery):
+    await callback_query.answer()
     action, survey_id_str = callback_query.data.split('_')[1:]
     survey_id = int(survey_id_str)
     
@@ -526,6 +527,7 @@ async def process_survey_decision(callback_query: types.CallbackQuery):
 
 @dp.callback_query(lambda c: c.data.startswith('app_'))
 async def process_app_decision(callback_query: types.CallbackQuery):
+    await callback_query.answer()
     action, app_id_str = callback_query.data.split('_')[1:]
     app_id = int(app_id_str)
     
