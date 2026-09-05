@@ -167,6 +167,18 @@ def init_db():
         )
     ''')
     
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS carts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER,
+            product_id INTEGER,
+            quantity INTEGER DEFAULT 1,
+            added_at TIMESTAMP,
+            FOREIGN KEY (telegram_id) REFERENCES users (telegram_id),
+            FOREIGN KEY (product_id) REFERENCES products (id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -203,6 +215,16 @@ def get_user_lang(telegram_id):
     row = cursor.fetchone()
     conn.close()
     if row and row[0]:
+        return row[0]
+    return None
+
+def get_referrer_id(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT referrer_id FROM users WHERE telegram_id = ?', (telegram_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row and len(row) > 0:
         return row[0]
     return None
 
@@ -531,6 +553,19 @@ def get_referrals(telegram_id):
     conn.close()
     return rows
 
+def get_all_referral_stats():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT r.first_name, u.first_name 
+        FROM users u 
+        JOIN users r ON u.referrer_id = r.telegram_id
+        ORDER BY r.first_name
+    ''')
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
 def add_product(telegram_id, name, photo_id, price):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -581,5 +616,45 @@ def delete_product(product_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('DELETE FROM products WHERE id = ?', (product_id,))
+    conn.commit()
+    conn.close()
+
+# --- CART FUNCTIONS ---
+
+def add_to_cart(telegram_id, product_id, quantity=1):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO carts (telegram_id, product_id, quantity, added_at)
+        VALUES (?, ?, ?, ?)
+    ''', (telegram_id, product_id, quantity, datetime.now()))
+    conn.commit()
+    conn.close()
+
+def get_user_cart(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT c.id, p.id, p.name, p.price, p.photo_id, c.quantity
+        FROM carts c
+        JOIN products p ON c.product_id = p.id
+        WHERE c.telegram_id = ?
+        ORDER BY c.added_at DESC
+    ''', (telegram_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def remove_from_cart(cart_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM carts WHERE id = ?', (cart_id,))
+    conn.commit()
+    conn.close()
+
+def clear_cart(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM carts WHERE telegram_id = ?', (telegram_id,))
     conn.commit()
     conn.close()
